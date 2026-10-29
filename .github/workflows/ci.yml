@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Conn3x
+        env: &gh
+          GH_TOKEN: ${{ github.token }}
+        run: &install |
+          tag=$(gh release view -R conn3xorg/conn3x --json tagName -q .tagName)
+          file="conn3x_${tag#v}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -sSfLO "https://github.com/conn3xorg/conn3x/releases/download/$tag/$file"
+          curl -sSfLO "https://github.com/conn3xorg/conn3x/releases/download/$tag/checksums.txt"
+          grep " $file\$" checksums.txt | sha256sum -c -
+          mkdir -p bin && tar -xzf "$file" -C bin conn3x
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: conn3x version
+      - run: conn3x fmt -check -recursive
+      - name: Validate
+        run: conn3x init -backend=false && conn3x validate
+      - name: Validate the example
+        working-directory: examples/local
+        run: conn3x init -backend=false && conn3x validate
+
+  e2e:
+    needs: validate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [rocky10, fedora45, ubuntu2404, debian13]
+    name: e2e (${{ matrix.distro }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The test host images live in the Conn3x repo.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: conn3xorg/conn3x
+          ref: main
+          path: conn3x
+          persist-credentials: false
+          sparse-checkout: test/images
+      - name: Install Conn3x
+        env: *gh
+        run: *install
+      - name: Start the ${{ matrix.distro }} host
+        working-directory: examples/local
+        env:
+          CONTAINERFILE: ${{ github.workspace }}/conn3x/test/images/${{ matrix.distro }}/Containerfile
+        run: ./up.sh
+      - name: Apply, then plan again with no changes
+        working-directory: examples/local
+        env:
+          TF_VAR_admin_password: ci-only-admin-pass-1
+        run: |
+          conn3x init
+          conn3x apply -auto-approve
+          conn3x plan -detailed-exitcode
+      # The admin signs in to the API, a wrong password gets 401, and a repo
+      # created over the API clones over HTTP. app.ini must hold none of the
+      # generated secrets.
+      - name: Sign in, create a repo and clone it
+        run: |
+          podman exec -i circuit-forgejo sh -eu <<'EOF'
+          u=http://127.0.0.1:3000
+          a='forgejo-admin:ci-only-admin-pass-1'
+          j='Content-Type: application/json'
+          curl -sSf $u/api/healthz | grep -q '"status": *"pass"'
+          [ "$(stat -c '%U:%G %a' /etc/forgejo/app.ini)" = "root:git 640" ]
+          if grep -qE '^(INTERNAL_TOKEN|SECRET_KEY|JWT_SECRET|LFS_JWT_SECRET) *=' /etc/forgejo/app.ini; then exit 1; fi
+          curl -sSf -u "$a" $u/api/v1/user | grep -q '"is_admin": *true'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -u forgejo-admin:wrong-password $u/api/v1/user)" = 401 ]
+          curl -sSf -u "$a" -H "$j" $u/api/v1/user/repos -d '{"name":"hello","auto_init":true}' >/dev/null
+          git clone -q $u/forgejo-admin/hello.git /tmp/hello
+          test -f /tmp/hello/README.md
+          EOF
+      - name: Clean up
+        if: always()
+        working-directory: examples/local
+        run: ./down.sh
