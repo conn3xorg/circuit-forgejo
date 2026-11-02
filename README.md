@@ -1,5 +1,7 @@
 # circuit-forgejo
 
+[![Conn3x grade](https://conn3x.org/circuits/forgejo/grade.svg)](https://conn3x.org/circuits/forgejo/grade)
+
 A Conn3x circuit that runs [Forgejo](https://forgejo.org), the self-hosted Git forge, on your own hosts. Repositories, issues, pull requests and packages, on a box you already pay for, with your code never leaving it.
 
 It downloads a pinned Forgejo release binary from Codeberg, checks its SHA-256, and runs it under systemd as a `git` user. You set the domain, the URL people reach it by, the listen address and the database; the circuit writes `/etc/forgejo/app.ini` from them and restarts Forgejo when it changes. Out of the box Forgejo listens only on `127.0.0.1:3000`, keeps its data in SQLite, and doesn't let strangers sign up. The host's own sshd serves git over SSH, so clone URLs look like `git@git.example.com:you/repo.git`.
