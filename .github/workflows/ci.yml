@@ -90,6 +90,20 @@ jobs:
           git clone -q $u/forgejo-admin/hello.git /tmp/hello
           test -f /tmp/hello/README.md
           EOF
+      - name: A new admin password reaches Forgejo off the command line
+        working-directory: examples/local
+        env:
+          TF_VAR_admin_password: ci-only-admin-pass-2
+        run: |
+          conn3x apply -auto-approve
+          conn3x plan -detailed-exitcode
+          podman exec circuit-forgejo sh -eu -c '
+            u=http://127.0.0.1:3000
+            curl -sSf -u forgejo-admin:ci-only-admin-pass-2 $u/api/v1/user | grep -q "\"is_admin\": *true"
+            [ "$(curl -s -o /dev/null -w "%{http_code}" -u forgejo-admin:ci-only-admin-pass-1 $u/api/v1/user)" = 401 ]
+            [ "$(curl -sSf -u forgejo-admin:ci-only-admin-pass-2 $u/api/v1/users/forgejo-admin/tokens)" = "[]" ]
+          '
+          ! grep -q -e "--password" ../../main.circuit.hcl
       - name: Clean up
         if: always()
         working-directory: examples/local

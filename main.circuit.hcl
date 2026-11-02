@@ -282,11 +282,23 @@ circuit "forgejo" {
   }
 
   # Runs when the password file changes or the user was just created.
-  # Forgejo's CLI only takes a password as an argument, so it's on this
-  # command line for the moment the command runs.
+  # The release's CLI only takes a password as an argument, so this goes
+  # through the API, with a short-lived token and the password on stdin.
   step "admin_set_password" {
     command {
-      command = "${local.cli} admin user change-password --username '${var.admin_username}' --password \"$(cat /etc/conn3x/forgejo/admin_password)\" --must-change-password=false >/dev/null"
+      command = <<-EOT
+        set -e
+        # Only send the password if forgejo holds the port, not any local user.
+        h=$(printf ':%04X$' ${var.http_port}); u=$(id -u git)
+        cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk -v h="$h" -v u="$u" '$4 == "0A" && $2 ~ h { n++; if ($8 != u) bad = 1 } END { exit !(n && !bad) }' || { echo "Port ${var.http_port} isn't held by the git user, so the password wasn't sent." >&2; exit 1; }
+        name=conn3x-$(date +%s)
+        token=$(${local.cli} admin user generate-access-token --username '${var.admin_username}' --token-name "$name" --scopes write:admin --raw)
+        e=$(sed 's/\\/\\\\/g; s/"/\\"/g' /etc/conn3x/forgejo/admin_password)
+        printf 'header = "Authorization: token %s"\n' "$token" | curl -sSf -o /dev/null -X PATCH -K- -H 'Content-Type: application/json' --data-binary @/dev/fd/3 ${local.local_url}/api/v1/admin/users/${var.admin_username} 3<<JSON
+        {"login_name":"${var.admin_username}","source_id":0,"must_change_password":false,"password":"$e"}
+        JSON
+        printf 'user = "${var.admin_username}:%s"\n' "$e" | curl -sSf -o /dev/null -X DELETE -K- ${local.local_url}/api/v1/users/${var.admin_username}/tokens/"$name"
+      EOT
       triggers = {
         password = conn3x_file.forgejo__admin_password[each.key].revision
         user     = conn3x_command.forgejo__admin[each.key].revision

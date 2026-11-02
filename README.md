@@ -15,7 +15,7 @@ variable "forgejo_admin_password" {
 }
 
 module "forgejo" {
-  source = "github.com/conn3xorg/circuit-forgejo?ref=v0.1.0"
+  source = "github.com/conn3xorg/circuit-forgejo?ref=v0.1.1"
 
   hosts                = { git1 = "203.0.113.10" }
   ssh_private_key_file = "~/.ssh/id_ed25519"
@@ -48,7 +48,7 @@ module "postgres" {
 }
 
 module "forgejo" {
-  source     = "github.com/conn3xorg/circuit-forgejo?ref=v0.1.0"
+  source     = "github.com/conn3xorg/circuit-forgejo?ref=v0.1.1"
   depends_on = [module.postgres]
 
   hosts             = { git1 = "203.0.113.10" }
@@ -79,7 +79,7 @@ On each host, in order:
 
 app.ini is write-only: it reaches the host, but the plan and state hold only an HMAC of it, since it can carry the PostgreSQL password. A change to any input shows in the plan as `content_hmac` changing. See [Secrets](https://docs.conn3x.org/reference/circuits/secrets) for the HMAC key Conn3x uses.
 
-Forgejo's CLI takes a password only as an argument, so the admin password is on a command line, visible to `ps`, for the moment `forgejo admin user change-password` runs. The admin is first created with a random password, so that's the only time.
+The admin is first created with a random password, then given its real one through the API, with a token made for that one call and removed after it. The password goes over stdin, so it's never on a command line, and only once the `git` user holds the HTTP port.
 
 The unit runs Forgejo with `ProtectSystem=strict`, so it can write only to `/var/lib/forgejo` and `/home/git/.ssh`, where it keeps the `authorized_keys` file sshd reads for git over SSH.
 
@@ -109,7 +109,7 @@ done
 
 ```hcl
 module "forgejo" {
-  source = "github.com/conn3xorg/circuit-forgejo?ref=v0.1.0"
+  source = "github.com/conn3xorg/circuit-forgejo?ref=v0.1.1"
 
   # ...
   forgejo_version = "17.0.1"
