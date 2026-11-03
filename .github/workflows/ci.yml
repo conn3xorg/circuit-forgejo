@@ -72,6 +72,9 @@ jobs:
           conn3x init
           conn3x apply -auto-approve
           conn3x plan -detailed-exitcode
+          # The example's secrets reach the host write-only, so none of them
+          # may show up in state.
+          if grep -qF -e ci-only-admin-pass-1 terraform.tfstate; then echo "A secret is in state." >&2; exit 1; fi
       # The admin signs in to the API, a wrong password gets 401, and a repo
       # created over the API clones over HTTP. app.ini must hold none of the
       # generated secrets.
