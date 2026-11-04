@@ -114,6 +114,28 @@ jobs:
             [ "$(curl -sSf -u forgejo-admin:ci-only-admin-pass-2 $u/api/v1/users/forgejo-admin/tokens)" = "[]" ]
           '
           ! grep -q -e "--password" ../../main.circuit.hcl
+      # Restarting the container boots systemd again, so this checks Forgejo
+      # is enabled and comes back with its config, database and repositories.
+      - name: Restart the host, then sign in and clone again
+        run: |
+          podman restart circuit-forgejo
+          for _ in $(seq 60); do
+            case $(podman exec circuit-forgejo systemctl is-system-running 2>/dev/null) in running|degraded) break ;; esac
+            sleep 1
+          done
+          podman exec -i circuit-forgejo sh -eu <<'EOF'
+          u=http://127.0.0.1:3000
+          for _ in $(seq 60); do
+            curl -sf $u/api/healthz | grep -q '"status": *"pass"' && break
+            sleep 1
+          done
+          curl -sSf $u/api/healthz | grep -q '"status": *"pass"'
+          curl -sSf -u forgejo-admin:ci-only-admin-pass-2 $u/api/v1/user | grep -q '"is_admin": *true'
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -u forgejo-admin:ci-only-admin-pass-1 $u/api/v1/user)" = 401 ]
+          rm -rf /tmp/hello
+          git clone -q $u/forgejo-admin/hello.git /tmp/hello
+          test -f /tmp/hello/README.md
+          EOF
       - name: Clean up
         if: always()
         working-directory: examples/local
