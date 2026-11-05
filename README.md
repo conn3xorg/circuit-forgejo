@@ -41,7 +41,7 @@ SQLite is fine for a person or a small team. For more, point Forgejo at PostgreS
 
 ```hcl
 module "postgres" {
-  source = "github.com/conn3xorg/circuit-postgres?ref=v0.2.0"
+  source = "github.com/conn3xorg/circuit-postgres?ref=v0.3.0"
 
   hosts          = { git1 = "203.0.113.10" }
   users          = ["forgejo"]
