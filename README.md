@@ -159,7 +159,7 @@ The new binary replaces the old one and Forgejo restarts, migrating its database
 
 ## Requirements
 
-Requires Conn3x v0.6.6 or later, systemd on each host, and outbound HTTPS to codeberg.org and your distribution's mirrors.
+Requires Conn3x v0.28.0 or later, systemd on each host, and outbound HTTPS to codeberg.org and your distribution's mirrors.
 
 ## Tested on
 
