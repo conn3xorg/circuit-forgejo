@@ -227,8 +227,8 @@ circuit "forgejo" {
   # them, and a plan straight after the apply would find it still starting.
   # On a first apply it's what starts Forgejo.
   step "restart" {
-    command {
-      command = "systemctl daemon-reload && systemctl restart forgejo"
+    service_action {
+      name = "forgejo"
       triggers = {
         binary = conn3x_download.forgejo__binary[each.key].revision
         config = conn3x_file.forgejo__config[each.key].revision
@@ -253,7 +253,7 @@ circuit "forgejo" {
     command {
       command  = "for _ in $(seq 120); do curl -sf -o /dev/null ${local.local_url}/api/healthz && exit 0; sleep 1; done; exit 1"
       unless   = "curl -sf -o /dev/null ${local.local_url}/api/healthz"
-      triggers = { restart = conn3x_command.forgejo__restart[each.key].revision }
+      triggers = { restart = conn3x_service_action.forgejo__restart[each.key].revision }
     }
   }
 
